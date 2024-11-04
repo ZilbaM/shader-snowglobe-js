@@ -7,6 +7,12 @@ uniform float u_cameraZoom;
 
 varying vec2 v_uv;
 
+// Sun and Moon Colors
+const vec3 sunColor = vec3(1.0, 0.8, 0.6);  // Slightly yellow/orange
+const vec3 moonColor = vec3(0.8, 0.8, 1.0); // Soft white/blue
+const vec3 daySkyColor = vec3(0.5, 0.7, 1.0); // Light blue for day
+const vec3 nightSkyColor = vec3(0.05, 0.05, 0.2); // Dark blue/black for night
+
 // Signed distance function for a box
 float sdBox(vec3 p, vec3 b) {
     vec3 q = abs(p) - b;
@@ -78,12 +84,34 @@ void main() {
     if (hit) {
         // Lighting
         vec3 normal = getNormal(p);
-        vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
-        float diff = max(dot(normal, lightDir), 0.0);
-        color = vec3(0.8, 0.5, 0.3) * diff; // Cube color with shading
+
+         // Calculate sun and moon positions based on time
+        float sunAngle = u_time * 0.1;
+        float moonAngle = sunAngle + 3.14159; // Opposite direction
+
+        // Sun and Moon direction vectors
+        vec3 sunDir = normalize(vec3(cos(sunAngle), sin(sunAngle), 0.5));
+        vec3 moonDir = normalize(vec3(cos(moonAngle), sin(moonAngle), -0.5));
+
+        // Calculate sun and moon diffuse lighting
+        float sunDiffuse = max(dot(normal, sunDir), 0.0);
+        float moonDiffuse = max(dot(normal, moonDir), 0.0);
+
+        // Combine the lighting with respective colors
+        vec3 sunLight = sunColor * sunDiffuse;
+        vec3 moonLight = moonColor * moonDiffuse;
+
+        // Combine sun and moon light, with a stronger contribution from the sun
+        color = sunLight + 0.5 * moonLight;
     } else {
         // Background color
-        color = vec3(0.1, 0.1, 0.1);
+          // Dynamic background based on sun position (sky gradient)
+        float dayFactor = clamp(dot(normalize(vec3(cos(u_time * 0.1), sin(u_time * 0.1), 0.0)), vec3(0.0, 1.0, 0.0)), 0.0, 1.0);
+        vec3 skyColor = mix(nightSkyColor, daySkyColor, dayFactor);
+
+        // Blend object color with sky color for a global illumination effect
+        color = mix(skyColor, color, hit ? 1.0 : 0.5);
+
     }
 
     gl_FragColor = vec4(color, 1.0);
