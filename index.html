@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <title>Ray Marching - Example 07</title>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <link rel="stylesheet" href="./style.css" />
+    </head>
+    <body class="open-sans-normal">
+        <p style="text-align: center; font-size: 2rem" class="open-sans-bold">
+            <span id="fps">60</span> <span>FPS</span>
+        </p>
+        <div style="width: 100%">
+            <canvas
+                id="canvas"
+                width="800"
+                height="600"
+                style="width: 100%; margin: 0 auto"
+            ></canvas>
+        </div>
+
+        <script src="script.js" type="module"></script>
+        <script id="vert" src="shader.vert" type="x-shader/x-vertex"></script>
+        <script id="frag" src="shader.frag" type="x-shader/x-fragment"></script>
+    </body>
+</html>
+<!DOCTYPE html>
+<html lang="en">
