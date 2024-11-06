@@ -43,7 +43,7 @@ body {
 
 body {
     width: 70%;
-    height: calc(100% - 8rem * 2);
+    height: 100vh;
     margin: 8rem auto;
     display: flex;
     flex-direction: column;
