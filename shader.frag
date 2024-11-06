@@ -1,36 +1,45 @@
 precision highp float;
 
+// ----------------------------------------
+// 1. Uniforms and Constants
+// ----------------------------------------
+
 uniform vec2 u_resolution;
 uniform float u_time;
 uniform vec2 u_cameraRotation; // x: pitch, y: yaw
 uniform float u_cameraZoom;
 
-#define PI 3.1415926535897932384626433832795
 #define MAX_STEPS 100
 #define MAX_DIST 20.0
 #define SURFACE_DIST 0.001
 
 // Light parameters
 vec3 lightDir = normalize(vec3(0.0, 1.0, 0.0)); // Light from above
-vec3 lightColor = vec3(1.0, 1.0, 1.0);
-vec3 ambientLight = vec3(0.2); // Increased ambient light intensity
+vec3 lightColor = vec3(1.0);
+vec3 ambientLight = vec3(0.2); // Ambient light intensity
 
-// Helper functions
+// ----------------------------------------
+// 2. Helper Functions
+// ----------------------------------------
+
+// Hash function for noise generation
 float hash(float n) {
     return fract(sin(n) * 43758.5453123);
 }
 
-float noise(in vec3 x) {
+// Perlin noise function
+float noise(vec3 x) {
     vec3 p = floor(x);
     vec3 f = fract(x);
+
     f = f * f * (3.0 - 2.0 * f);
 
     float n = p.x + p.y * 57.0 + 113.0 * p.z;
 
     return mix(
         mix(
-            mix(hash(n + 0.0), hash(n + 1.0), f.x),
-            mix(hash(n + 57.0), hash(n + 58.0), f.x),
+            mix(hash(n +   0.0), hash(n +   1.0), f.x),
+            mix(hash(n +  57.0), hash(n +  58.0), f.x),
             f.y
         ),
         mix(
@@ -42,13 +51,9 @@ float noise(in vec3 x) {
     );
 }
 
+// Signed distance functions (SDFs) for basic shapes
 float sdSphere(vec3 p, float s) {
     return length(p) - s;
-}
-
-float smin(float a, float b, float k) {
-    float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
-    return mix(b, a, h) - k * h * (1.0 - h);
 }
 
 float sdCappedCylinder(vec3 p, vec2 h) {
@@ -56,21 +61,24 @@ float sdCappedCylinder(vec3 p, vec2 h) {
     return min(max(d.x, d.y), 0.0) + length(max(d, vec2(0.0)));
 }
 
-// Shape functions
+// ----------------------------------------
+// 3. Shape Functions
+// ----------------------------------------
+
+// SDF for the snowglobe sphere
 float shapeBall(vec3 pos) {
     return sdSphere(pos, 0.6);
 }
 
+// SDF for the base (support) of the snowglobe
 float shapeSupport(vec3 pos) {
     vec3 p = pos;
     p.y += 0.55;
     return sdCappedCylinder(p, vec2(0.55, 0.2)) - 0.03;
 }
 
+// SDF for the snow particles inside the globe
 float shapeSnow(vec3 pos) {
-    // Adjusted to remove the ground plane
-    // Distribute snow particles throughout the globe
-
     // Generate random positions for snow particles using noise
     float n = noise(pos * 10.0 + u_time * 0.5);
 
@@ -95,30 +103,37 @@ float shapeSnow(vec3 pos) {
     return max(snow, globe);
 }
 
-// Distance function
+// ----------------------------------------
+// 4. Distance Function
+// ----------------------------------------
+
+// Combines all SDFs to determine the closest distance and material ID
 vec2 map(vec3 p) {
     float dBall = shapeBall(p);
     float dSupport = shapeSupport(p);
     float dSnow = shapeSnow(p);
 
     float minDist = dBall;
-    float materialID = 1.0; // 1 for ball
+    float materialID = 1.0; // 1: ball
 
     if (dSnow < minDist) {
         minDist = dSnow;
-        materialID = 2.0; // 2 for snow
+        materialID = 2.0; // 2: snow
     }
 
     if (dSupport < minDist) {
         minDist = dSupport;
-        materialID = 3.0; // 3 for support (the base)
+        materialID = 3.0; // 3: support (base)
     }
 
     return vec2(minDist, materialID);
 }
 
+// ----------------------------------------
+// 5. Normal Calculation
+// ----------------------------------------
 
-// Function to compute normals using the gradient of the distance function
+// Computes the normal vector at point p using numerical gradient
 vec3 GetNormal(vec3 p) {
     float eps = 0.001;
     float dx = map(p + vec3(eps, 0.0, 0.0)).x - map(p - vec3(eps, 0.0, 0.0)).x;
@@ -127,12 +142,15 @@ vec3 GetNormal(vec3 p) {
     return normalize(vec3(dx, dy, dz));
 }
 
-// Shading functions
+// ----------------------------------------
+// 6. Shading Functions
+// ----------------------------------------
 
+// Shades the snow particles
 vec3 shadeSnow(vec3 pos, vec3 ray) {
     vec3 norm = GetNormal(pos);
 
-    // Ambient
+    // Ambient light
     vec3 ambient = ambientLight * vec3(1.0); // White snow
     ambient *= 2.0; // Increase ambient intensity for snow
 
@@ -143,10 +161,11 @@ vec3 shadeSnow(vec3 pos, vec3 ray) {
     return ambient + diffuse;
 }
 
+// Shades the base (support) of the snowglobe
 vec3 shadeSupport(vec3 pos, vec3 ray) {
     vec3 norm = GetNormal(pos);
 
-    // Ambient
+    // Ambient light
     vec3 ambient = ambientLight * vec3(0.8, 0.5, 0.3); // Base color
 
     // Diffuse shading
@@ -159,12 +178,12 @@ vec3 shadeSupport(vec3 pos, vec3 ray) {
     float spec = pow(max(dot(viewDir, reflectDir), 0.0), 32.0);
     vec3 specular = spec * lightColor * 0.5;
 
-    // Combine
     return ambient + diffuse + specular;
 }
 
+// Shades the snowglobe's glass sphere
 vec3 shadeBall(vec3 pos, vec3 ray) {
-    float ior = 1.0 / 1.5; 
+    float ior = 1.0 / 1.5; // Index of refraction (air to glass)
     vec3 norm = GetNormal(pos);
 
     // Refraction
@@ -197,33 +216,37 @@ vec3 shadeBall(vec3 pos, vec3 ray) {
         // Shade the snow
         col = shadeSnow(p, refrRay);
     } else {
-        // Apply ambient light inside the globe
+        // Ambient light inside the globe
         col = ambientLight * vec3(0.5);
     }
 
     // Reflection (using background color)
-    vec3 reflColor = vec3(0.2, 0.2, 0.2); 
+    vec3 reflColor = vec3(0.2); // Dark gray
 
     // Fresnel effect
     float fresnel = pow(1.0 - max(dot(norm, -ray), 0.0), 3.0);
     col = mix(col, reflColor, fresnel);
 
-    // Apply lighting to the globe surface
-    // Ambient
+    // Lighting on the globe surface
+    // Ambient light
     vec3 ambient = ambientLight * vec3(0.9, 0.9, 0.95); // Slightly bluish glass color
 
-    // Diffuse
+    // Diffuse shading
     float diff = max(dot(norm, lightDir), 0.0);
     vec3 diffuse = diff * lightColor * vec3(0.9, 0.9, 0.95);
 
     // Combine
-    col +=  diffuse + ambient;
+    col += ambient + diffuse;
 
     return col;
 }
 
+// ----------------------------------------
+// 7. Main Function
+// ----------------------------------------
+
 void main() {
-    vec2 uv = (gl_FragCoord.xy / u_resolution - 0.5) * 2.0;
+    vec2 uv = (gl_FragCoord.xy / u_resolution) * 2.0 - 1.0;
     uv.x *= u_resolution.x / u_resolution.y;
 
     // Camera setup
@@ -237,7 +260,7 @@ void main() {
         u_cameraZoom * cos(pitch) * cos(yaw)
     );
 
-    // Camera direction
+    // Camera direction vectors
     vec3 forward = normalize(-ro); // Looking at the origin
     vec3 right = normalize(cross(vec3(0.0, 1.0, 0.0), forward));
     vec3 up = cross(forward, right);
@@ -250,6 +273,7 @@ void main() {
     int hitType = 0;
     bool hit = false;
     vec3 p;
+
     for (int i = 0; i < MAX_STEPS; i++) {
         p = ro + t * rd;
         vec2 res = map(p);
@@ -265,7 +289,7 @@ void main() {
         }
     }
 
-    vec3 color = vec3(0.0);
+    vec3 color;
     if (hit) {
         if (hitType == 1) {
             // Hit the ball
@@ -279,7 +303,7 @@ void main() {
         }
     } else {
         // Background color
-        color = vec3(0.4, 0.4, 0.6); // Dark blue background
+        color = vec3(0.4, 0.4, 0.6); 
     }
 
     gl_FragColor = vec4(color, 1.0);
