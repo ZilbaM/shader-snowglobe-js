@@ -5,35 +5,142 @@ uniform float u_time;
 uniform vec2 u_cameraRotation; // x: pitch, y: yaw
 uniform float u_cameraZoom;
 
-varying vec2 v_uv;
+#define PI 3.1415926535897932384626433832795
+#define MAX_STEPS 100
+#define MAX_DIST 20.0
+#define SURFACE_DIST 0.001
 
-// Sun and Moon Colors
-const vec3 sunColor = vec3(1.0, 0.8, 0.6);  // Slightly yellow/orange
-const vec3 moonColor = vec3(0.8, 0.8, 1.0); // Soft white/blue
-const vec3 daySkyColor = vec3(0.5, 0.7, 1.0); // Light blue for day
-const vec3 nightSkyColor = vec3(0.05, 0.05, 0.2); // Dark blue/black for night
-
-// Signed distance function for a box
-float sdBox(vec3 p, vec3 b) {
-    vec3 q = abs(p) - b;
-    return length(max(q, vec3(0.0))) + min(max(q.x, max(q.y, q.z)), 0.0);
+// Helper functions
+float hash(float n) {
+    return fract(sin(n) * 43758.5453123);
 }
 
-// Approximate surface normal
-vec3 getNormal(vec3 p) {
-    float eps = 0.001;
-    vec3 n = vec3(
-        sdBox(p + vec3(eps, 0.0, 0.0), vec3(0.5)) - sdBox(p - vec3(eps, 0.0, 0.0), vec3(0.5)),
-        sdBox(p + vec3(0.0, eps, 0.0), vec3(0.5)) - sdBox(p - vec3(0.0, eps, 0.0), vec3(0.5)),
-        sdBox(p + vec3(0.0, 0.0, eps), vec3(0.5)) - sdBox(p - vec3(0.0, 0.0, eps), vec3(0.5))
+float noise(in vec3 x) {
+    vec3 p = floor(x);
+    vec3 f = fract(x);
+    f = f * f * (3.0 - 2.0 * f);
+
+    float n = p.x + p.y * 57.0 + 113.0 * p.z;
+
+    return mix(
+        mix(
+            mix(hash(n + 0.0), hash(n + 1.0), f.x),
+            mix(hash(n + 57.0), hash(n + 58.0), f.x),
+            f.y
+        ),
+        mix(
+            mix(hash(n + 113.0), hash(n + 114.0), f.x),
+            mix(hash(n + 170.0), hash(n + 171.0), f.x),
+            f.y
+        ),
+        f.z
     );
-    return normalize(n);
+}
+
+float sdSphere(vec3 p, float s) {
+    return length(p) - s;
+}
+
+float smin(float a, float b, float k) {
+    float h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+    return mix(b, a, h) - k * h * (1.0 - h);
+}
+
+float phong(vec3 l, vec3 e, vec3 n, float power) {
+    float nrm = (power + 8.0) / (PI * 8.0);
+    return pow(max(dot(l, reflect(e, n)), 0.0), power) * nrm;
+}
+
+// Shape functions
+float shapeBall(vec3 pos) {
+    return sdSphere(pos, 0.6);
+}
+
+float shapeSnow(vec3 pos) {
+    float dp = pos.y + 0.3;
+    dp += noise(pos.xzy * 123.0) * 0.01;
+    dp += noise(pos.xzy * 35.12679) * 0.02;
+
+    vec3 poss1 = pos + vec3(0.0, 0.2, 0.0);
+    poss1 *= 0.99 + noise(pos * 200.0) * 0.01;
+
+    vec3 poss2 = pos - vec3(0.0, 0.05, 0.0);
+    poss2 *= 0.99 + noise(pos * 200.0) * 0.02;
+
+    float ds1 = sdSphere(poss1, 0.2);
+    float ds2 = sdSphere(poss2, 0.13);
+
+    ds1 = smin(ds1, ds2, 0.03);
+    dp = smin(dp, ds1, 0.05);
+
+    return max(dp, shapeBall(pos + 0.1));
 }
 
 // Distance function
 float map(vec3 p) {
-    // Cube of size 1 centered at the origin
-    return sdBox(p, vec3(0.5));
+    float dBall = shapeBall(p);
+    float dSnow = shapeSnow(p);
+    return min(dBall, dSnow);
+}
+
+// Function to compute normals using the gradient of the distance function
+vec3 GetNormal(vec3 p) {
+    float eps = 0.001;
+    vec3 n;
+    n.x = map(p + vec3(eps, 0.0, 0.0)) - map(p - vec3(eps, 0.0, 0.0));
+    n.y = map(p + vec3(0.0, eps, 0.0)) - map(p - vec3(0.0, eps, 0.0));
+    n.z = map(p + vec3(0.0, 0.0, eps)) - map(p - vec3(0.0, 0.0, eps));
+    return normalize(n);
+}
+
+// Shading function for the snowglobe
+vec3 shadeBall(vec3 pos, vec3 ray) {
+    float ior = 0.98; // Index of refraction
+    vec3 norm = normalize(pos);
+
+    // Refraction
+    vec3 refrRay = normalize(refract(ray, norm, ior));
+    vec3 refrPos = pos + refrRay * 0.001;
+
+    // Reflection
+    vec3 reflRay = normalize(reflect(ray, norm));
+    vec3 reflPos = pos + reflRay * 0.001;
+
+    // Trace snow inside the globe
+    float ts = 0.0;
+    bool hitSnow = false;
+    vec3 p;
+    for (int i = 0; i < MAX_STEPS; i++) {
+        p = refrPos + refrRay * ts;
+        float d = shapeSnow(p);
+        if (d < SURFACE_DIST) {
+            hitSnow = true;
+            break;
+        }
+        ts += d;
+        if (ts > MAX_DIST) {
+            break;
+        }
+    }
+
+    vec3 col;
+    if (hitSnow) {
+        // Shade the snow
+        vec3 normSnow = GetNormal(p);
+        float diff = max(dot(normSnow, vec3(0.0, 1.0, 0.0)), 0.0);
+        col = vec3(0.8) * diff;
+    } else {
+        col = vec3(0.5); // Inside the globe
+    }
+
+    // Reflection (using background color)
+    vec3 reflColor = vec3(0.0); // Assuming black background
+
+    // Fresnel effect
+    float fresnel = pow(1.0 - max(dot(norm, -ray), 0.0), 3.0);
+    col = mix(col, reflColor, fresnel);
+
+    return col;
 }
 
 void main() {
@@ -51,15 +158,10 @@ void main() {
         u_cameraZoom * cos(pitch) * cos(yaw)
     );
 
-    // Target position
-    vec3 target = vec3(0.0);
-
     // Camera direction
-    vec3 forward = normalize(target - ro);
-
-    // Right and up vectors
-    vec3 right = normalize(cross(forward, vec3(0.0, 1.0, 0.0)));
-    vec3 up = cross(right, forward);
+    vec3 forward = normalize(-ro); // Looking at the origin
+    vec3 right = normalize(cross(vec3(0.0, 1.0, 0.0), forward));
+    vec3 up = cross(forward, right);
 
     // Construct ray direction
     vec3 rd = normalize(uv.x * right + uv.y * up + forward);
@@ -68,50 +170,25 @@ void main() {
     float t = 0.0;
     bool hit = false;
     vec3 p;
-    for (int i = 0; i < 100; i++) {
+    for (int i = 0; i < MAX_STEPS; i++) {
         p = ro + t * rd;
-        float dist = map(p);
-        if (dist < 0.001) {
+        float d = map(p);
+        if (d < SURFACE_DIST) {
             hit = true;
             break;
         }
-        t += dist;
-        if (t > 20.0) break;
+        t += d;
+        if (t > MAX_DIST) {
+            break;
+        }
     }
 
     vec3 color = vec3(0.0);
-
     if (hit) {
-        // Lighting
-        vec3 normal = getNormal(p);
-
-         // Calculate sun and moon positions based on time
-        float sunAngle = u_time * 0.1;
-        float moonAngle = sunAngle + 3.14159; // Opposite direction
-
-        // Sun and Moon direction vectors
-        vec3 sunDir = normalize(vec3(cos(sunAngle), sin(sunAngle), 0.5));
-        vec3 moonDir = normalize(vec3(cos(moonAngle), sin(moonAngle), -0.5));
-
-        // Calculate sun and moon diffuse lighting
-        float sunDiffuse = max(dot(normal, sunDir), 0.0);
-        float moonDiffuse = max(dot(normal, moonDir), 0.0);
-
-        // Combine the lighting with respective colors
-        vec3 sunLight = sunColor * sunDiffuse;
-        vec3 moonLight = moonColor * moonDiffuse;
-
-        // Combine sun and moon light, with a stronger contribution from the sun
-        color = sunLight + 0.5 * moonLight;
+        color = shadeBall(p, rd);
     } else {
         // Background color
-          // Dynamic background based on sun position (sky gradient)
-        float dayFactor = clamp(dot(normalize(vec3(cos(u_time * 0.1), sin(u_time * 0.1), 0.0)), vec3(0.0, 1.0, 0.0)), 0.0, 1.0);
-        vec3 skyColor = mix(nightSkyColor, daySkyColor, dayFactor);
-
-        // Blend object color with sky color for a global illumination effect
-        color = mix(skyColor, color, hit ? 1.0 : 0.5);
-
+        color = vec3(0.0); // Black background
     }
 
     gl_FragColor = vec4(color, 1.0);
