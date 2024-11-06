@@ -10,13 +10,6 @@ Welcome to the Snow Globe Shader Project! This project showcases a ray-marched 3
 - Dynamic Background: Background color changes over time, enhancing visual appeal.
 - Interactive Camera: Use mouse or touch controls to adjust the camera view.
 
-## Features
-
-- Refraction and Reflection: The glass sphere realistically bends and reflects light, simulating how glass interacts with light in the real world.
-- Animated Snow: Snow particles inside the globe move and flow, creating a lifelike snowfall effect.
-- Realistic Lighting: Incorporates ambient, diffuse, and specular lighting to give depth and dimension to the scene.
-- Simple Controls: Camera position and zoom can be adjusted to view the snow globe from different angles.
-
 ## Installation
 No special installation is required. Simply clone the repository and open the `index.html` file in your web browser.
 
