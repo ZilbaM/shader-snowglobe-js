@@ -196,10 +196,23 @@ async function main() {
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
 
   // Render Loop
-
+  let frameCount = 0;
+  let fps = 0;
+  let lastTime = performance.now();
   const startTime = Date.now();
 
   function render() {
+    frameCount++;
+    const currentTime = performance.now();
+    const deltaTime = currentTime - lastTime;
+
+    if (deltaTime >= 10) { // Update every second
+      fps = Math.round((frameCount * 1000) / deltaTime);
+      document.getElementById("fps").innerText = fps.toString();
+      frameCount = 0;
+      lastTime = currentTime;
+    }
+    
     resizeCanvas();
     gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
 
