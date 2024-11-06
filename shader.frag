@@ -14,7 +14,7 @@ uniform float u_cameraZoom;
 // Light 
 vec3 lightDir = normalize(vec3(1, 1.0, 0.0)); 
 vec3 lightColor = vec3(0.6);
-vec3 ambientLight = vec3(0.2); // Reduced ambient light intensity
+vec3 ambientLight = vec3(0.2); 
 
 // Helper Functions
 
@@ -48,7 +48,6 @@ float noise(vec3 x) {
 }
 
 // Signed distance functions 
-
 float sdSphere(vec3 p, float s) {
     return length(p) - s;
 }
@@ -72,6 +71,7 @@ float shapeSupport(vec3 pos) {
     return sdCappedCylinder(p, vec2(0.55, 0.2)) - 0.03;
 }
 
+// Background color change function
 vec3 getBackgroundColor() {
     float t = u_time * 0.1;
     vec3 color = vec3(
@@ -100,7 +100,7 @@ float shapeSnow(vec3 pos) {
     float snow = snowParticle + (1.0 - density) * 100.0;
 
 
-    float globe = sdSphere(pos, 0.6); // Match the radius of the glass sphere
+    float globe = sdSphere(pos, 0.6); // = Radius of the glass sphere
 
     // Maximum of the snow and globe distances to confine snow inside
     return max(snow, globe);
@@ -115,11 +115,11 @@ vec2 map(vec3 p) {
     float dSupport = shapeSupport(p);
 
     float minDist = dSnow;
-    float materialID = 2.0; 
+    float materialID = 2.0; // 2 : snow
 
     if (dBall < minDist) {
         minDist = dBall;
-        materialID = 1.0; 
+        materialID = 1.0; // 1: Glass sphere
     }
 
     if (dSupport < minDist) {
@@ -145,7 +145,7 @@ vec3 shadeSnow(vec3 pos, vec3 ray) {
     vec3 norm = GetNormal(pos);
 
     vec3 ambient = ambientLight * vec3(1.0) * 3.0; 
-    ambient *= 1.2; // Increase ambient intensity for snow
+    ambient *= 1.2; 
 
     float diff = max(dot(norm, lightDir), 0.0);
     vec3 diffuse = diff * lightColor * vec3(1.0);
@@ -159,7 +159,7 @@ vec3 shadeSupport(vec3 pos, vec3 ray) {
 
     vec3 ambient = ambientLight * vec3(0.8, 0.5, 0.3); // Base color
 
-    // Diffuse shading
+    // shading
     float diff = max(dot(norm, lightDir), 0.0);
     vec3 diffuse = diff * lightColor * vec3(0.8, 0.5, 0.3);
 
@@ -168,18 +168,16 @@ vec3 shadeSupport(vec3 pos, vec3 ray) {
 
 // Glass sphere
 vec3 shadeBall(vec3 pos, vec3 ray) {
-    float ior = 1.0 / 1.5; // Correct index of refraction for air to glass
+    float ior = 1.0 / 1.5; // index of refraction for air to glass
     vec3 norm = GetNormal(pos);
 
     // Refraction
     vec3 refrRay = refract(ray, norm, ior);
     if (length(refrRay) == 0.0) {
-        // Total internal reflection
         refrRay = reflect(ray, norm);
     }
-    vec3 refrPos = pos + refrRay * 0.005; // Small offset to prevent self-intersection
+    vec3 refrPos = pos + refrRay * 0.005; // offset to prevent self-intersection
 
-    // Trace refracted ray
     float ts = 0.0;
     int refrHitType = 0;
     bool refrHit = false;
@@ -223,21 +221,17 @@ vec3 shadeBall(vec3 pos, vec3 ray) {
         col = getBackgroundColor();
     }
 
-    vec3 reflColor = getBackgroundColor(); // Reflection color (adjust as needed)
+    vec3 reflColor = getBackgroundColor(); // Reflection color 
 
-    // Fresnel effect
+    // Fresnel effect (for proper reflection)
     float fresnel = pow(1.0 - max(dot(norm, -ray), 0.0), 3.0);
     col = mix(col, reflColor, fresnel);
 
     // Lighting on the globe surface
-    // Ambient light
-    vec3 ambient = ambientLight * vec3(0.9, 0.9, 0.95); // Slightly bluish glass color
-
-    // Diffuse shading
+    vec3 ambient = ambientLight * vec3(0.9, 0.9, 0.95);
     float diff = max(dot(norm, lightDir), 0.0);
     vec3 diffuse = diff * lightColor * vec3(0.9, 0.9, 0.95);
 
-    // Specular shading (optional)
     vec3 viewDir = normalize(-ray);
     vec3 reflectDir = reflect(-lightDir, norm);
     float spec = pow(max(dot(viewDir, reflectDir), 0.0), 64.0);
@@ -249,7 +243,6 @@ vec3 shadeBall(vec3 pos, vec3 ray) {
     return col;
 }
 
-// Main Function
 
 void main() {
     vec2 uv = (gl_FragCoord.xy / u_resolution) * 2.0 - 1.0;
