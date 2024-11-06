@@ -32,13 +32,26 @@
     font-variation-settings: "wdth" 100;
 }
 
+*, *:before, *:after {
+    margin: 0;padding: 0;box-sizing: border-box;
+}
+
 body {
     height: 100vh;
-    overflow: hidden;
     margin: auto;
-    padding: 0;
+    padding: 1rem;
     display: flex;
     flex-direction: column;
-
+    align-items: center;
 }
+h1 {
+    margin: 1rem 0;
+}
+canvas {
+    margin: auto;
+    height: 75vh;
+    width: 75vh;
+    
+}
+
 
