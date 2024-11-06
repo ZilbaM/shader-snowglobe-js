@@ -1,14 +1,16 @@
+// Helper Functions
+
 async function readShader(id) {
   const req = await fetch(document.getElementById(id).src);
   return await req.text();
 }
 
 function createShader(gl, type, src) {
-  let shader = gl.createShader(type);
+  const shader = gl.createShader(type);
   gl.shaderSource(shader, src);
   gl.compileShader(shader);
 
-  let success = gl.getShaderParameter(shader, gl.COMPILE_STATUS);
+  const success = gl.getShaderParameter(shader, gl.COMPILE_STATUS);
   if (success) return shader;
 
   console.error("Could not compile WebGL Shader", gl.getShaderInfoLog(shader));
@@ -16,50 +18,55 @@ function createShader(gl, type, src) {
 }
 
 function createProgram(gl, vertShader, fragShader) {
-  let program = gl.createProgram();
+  const program = gl.createProgram();
   gl.attachShader(program, vertShader);
   gl.attachShader(program, fragShader);
   gl.linkProgram(program);
 
-  let success = gl.getProgramParameter(program, gl.LINK_STATUS);
+  const success = gl.getProgramParameter(program, gl.LINK_STATUS);
   if (success) return program;
 
-  console.error("Could not Link WebGL Program", gl.getProgramInfoLog(program));
+  console.error("Could not link WebGL Program", gl.getProgramInfoLog(program));
   gl.deleteProgram(program);
 }
+
+// Main Function
 
 async function main() {
   const canvas = document.getElementById("canvas");
   const gl = canvas.getContext("webgl2");
-  if (!gl) alert("Could not initialize WebGL Context.");
+  if (!gl) {
+    alert("Could not initialize WebGL context.");
+    return;
+  }
 
-  // Resize canvas to fit the window
   function resizeCanvas() {
     canvas.width = canvas.clientWidth;
     canvas.height = canvas.clientHeight;
   }
-  window.addEventListener('resize', resizeCanvas);
+  window.addEventListener("resize", resizeCanvas);
   resizeCanvas();
 
-  // Camera parameters
-  let camera = {
-    rotation: { x: 0, y: 0 }, // Rotation angles (pitch and yaw)
-    zoom: 2.0 // Zoom distance
+  const camera = {
+    rotation: { x: 0, y: 0 }, // Rotation angles 
+    zoom: 2.0, // Z position 
   };
 
-  // Mouse controls
+  // Event Handlers
+
+    // Mouse controls
   let isDragging = false;
   let previousMousePosition = { x: 0, y: 0 };
 
-  canvas.addEventListener('mousedown', function (e) {
+  canvas.addEventListener("mousedown", (e) => {
     isDragging = true;
     previousMousePosition = { x: e.clientX, y: e.clientY };
   });
 
-  canvas.addEventListener('mousemove', function (e) {
+  canvas.addEventListener("mousemove", (e) => {
     if (isDragging) {
-      let deltaX = e.clientX - previousMousePosition.x;
-      let deltaY = e.clientY - previousMousePosition.y;
+      const deltaX = e.clientX - previousMousePosition.x;
+      const deltaY = e.clientY - previousMousePosition.y;
 
       camera.rotation.x += deltaY * 0.005;
       camera.rotation.y += deltaX * 0.005;
@@ -68,31 +75,36 @@ async function main() {
     }
   });
 
-  canvas.addEventListener('mouseup', function (e) {
+  canvas.addEventListener("mouseup", () => {
     isDragging = false;
   });
 
-  canvas.addEventListener('mouseleave', function (e) {
+  canvas.addEventListener("mouseleave", () => {
     isDragging = false;
   });
 
-  canvas.addEventListener('wheel', function (e) {
+  canvas.addEventListener("wheel", (e) => {
     e.preventDefault();
     camera.zoom += e.deltaY * 0.01;
-    camera.zoom = Math.max(0.5, Math.min(5.0, camera.zoom)); // Clamping zoom level
+    camera.zoom = Math.max(0.5, Math.min(5.0, camera.zoom)); 
   });
 
-  // Touch controls
+    // Touch controls
   let isTouchDragging = false;
   let previousTouchPosition = { x: 0, y: 0 };
   let initialPinchDistance = 0;
   let initialZoom = camera.zoom;
 
-  canvas.addEventListener('touchstart', function (e) {
+  canvas.addEventListener("touchstart", (e) => {
     if (e.touches.length === 1) {
+      // Single touch: rotate
       isTouchDragging = true;
-      previousTouchPosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      previousTouchPosition = {
+        x: e.touches[0].clientX,
+        y: e.touches[0].clientY,
+      };
     } else if (e.touches.length === 2) {
+      // Two fingers: zoom
       isTouchDragging = false;
       initialPinchDistance = Math.hypot(
         e.touches[0].clientX - e.touches[1].clientX,
@@ -102,34 +114,44 @@ async function main() {
     }
   });
 
-  canvas.addEventListener('touchmove', function (e) {
+  canvas.addEventListener("touchmove", (e) => {
     if (isTouchDragging && e.touches.length === 1) {
-      let deltaX = e.touches[0].clientX - previousTouchPosition.x;
-      let deltaY = e.touches[0].clientY - previousTouchPosition.y;
+      // Rotate
+      const deltaX = e.touches[0].clientX - previousTouchPosition.x;
+      const deltaY = e.touches[0].clientY - previousTouchPosition.y;
 
       camera.rotation.x += deltaY * 0.005;
       camera.rotation.y += deltaX * 0.005;
 
-      previousTouchPosition = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+      previousTouchPosition = {
+        x: e.touches[0].clientX,
+        y: e.touches[0].clientY,
+      };
     } else if (e.touches.length === 2) {
-      let pinchDistance = Math.hypot(
+      // Zoom
+      const pinchDistance = Math.hypot(
         e.touches[0].clientX - e.touches[1].clientX,
         e.touches[0].clientY - e.touches[1].clientY
       );
-      let deltaDistance = pinchDistance - initialPinchDistance;
+      const deltaDistance = pinchDistance - initialPinchDistance;
       camera.zoom = initialZoom - deltaDistance * 0.01;
-      camera.zoom = Math.max(0.5, Math.min(5.0, camera.zoom)); // Clamping zoom level
+      camera.zoom = Math.max(0.5, Math.min(5.0, camera.zoom));
     }
   });
 
-  canvas.addEventListener('touchend', function (e) {
+  canvas.addEventListener("touchend", (e) => {
     if (e.touches.length === 0) {
       isTouchDragging = false;
     }
   });
 
-  const vertShader = createShader(gl, gl.VERTEX_SHADER, await readShader("vert")); // prettier-ignore
-  const fragShader = createShader(gl, gl.FRAGMENT_SHADER, await readShader("frag")); // prettier-ignore
+  // Shader Setup
+
+  const vertShaderSrc = await readShader("vert");
+  const fragShaderSrc = await readShader("frag");
+
+  const vertShader = createShader(gl, gl.VERTEX_SHADER, vertShaderSrc);
+  const fragShader = createShader(gl, gl.FRAGMENT_SHADER, fragShaderSrc);
   const program = createProgram(gl, vertShader, fragShader);
 
   const a_position = gl.getAttribLocation(program, "a_position");
@@ -140,26 +162,26 @@ async function main() {
   const u_cameraRotation = gl.getUniformLocation(program, "u_cameraRotation");
   const u_cameraZoom = gl.getUniformLocation(program, "u_cameraZoom");
 
-  // prettier-ignore
-  const data = new Float32Array([
+  // Buffer
+
+  const vertices = new Float32Array([
     // x    y       u    v
-    -1.0, -1.0,   0.0, 0.0,
-     1.0, -1.0,   1.0, 0.0,
-     1.0,  1.0,   1.0, 1.0,
-    -1.0,  1.0,   0.0, 1.0,
+    -1.0, -1.0, 0.0, 0.0,
+     1.0, -1.0, 1.0, 0.0,
+     1.0,  1.0, 1.0, 1.0,
+    -1.0,  1.0, 0.0, 1.0,
   ]);
-  // prettier-ignore
-  const indices = new Uint16Array([
-    0, 1, 2,
-    0, 2, 3,
-  ]);
+
+  // Index data
+  const indices = new Uint16Array([0, 1, 2, 0, 2, 3]);
 
   const vao = gl.createVertexArray();
   gl.bindVertexArray(vao);
 
   const vbo = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
-  gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+  gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+
   gl.enableVertexAttribArray(a_position);
   gl.vertexAttribPointer(a_position, 2, gl.FLOAT, false, 4 * 4, 0);
   gl.enableVertexAttribArray(a_uv);
@@ -173,7 +195,9 @@ async function main() {
   gl.bindBuffer(gl.ARRAY_BUFFER, null);
   gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, null);
 
-  let startTime = Date.now();
+  // Render Loop
+
+  const startTime = Date.now();
 
   function render() {
     resizeCanvas();
@@ -182,8 +206,8 @@ async function main() {
     gl.clearColor(0.0, 0.0, 0.0, 1.0);
     gl.clear(gl.COLOR_BUFFER_BIT);
 
-    gl.bindVertexArray(vao);
     gl.useProgram(program);
+    gl.bindVertexArray(vao);
 
     gl.uniform2f(u_resolution, gl.canvas.width, gl.canvas.height);
     gl.uniform1f(u_time, (Date.now() - startTime) * 0.001);
@@ -191,6 +215,7 @@ async function main() {
     gl.uniform1f(u_cameraZoom, camera.zoom);
 
     gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+
     gl.bindVertexArray(null);
 
     requestAnimationFrame(render);
